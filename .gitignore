@@ -1,0 +1,77 @@
+# ============================================
+# SmartNote AI Project .gitignore
+# ============================================
+
+# Python Core
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+
+# Poetry
+.venv/
+# poetry.lock  # 협업 시 이 줄 주석 처리
+
+# 민감 정보 (절대 커밋 금지!)
+.env
+.env.local
+*.env
+config.yaml
+secrets.yaml
+api_keys.json
+*.key
+*.pem
+
+# AI/ML
+models/
+checkpoints/
+*.pkl
+*.pth
+
+# Vector Database (ChromaDB)
+data/chroma_db/
+*.db
+*.sqlite
+
+# 옵시디언 테스트 (실제 vault는 별도 관리)
+vault/
+test_vault/
+obsidian_test/
+
+# 임시 파일
+tmp/
+temp/
+uploads/
+output/
+*.tmp
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Linters
+.mypy_cache/
+.ruff_cache/
+
+# OS
+Thumbs.db
+desktop.ini
+EOF
+
+# AI
+project-plan.md
