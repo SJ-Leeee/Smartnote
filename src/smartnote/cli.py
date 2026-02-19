@@ -76,8 +76,6 @@ def save(
         "title": title,
         "file_path": str(path),
         "skip_tistory": skip_tistory,
-        "analysis": {},
-        "classification": {},
         "enhanced_content": "",
         "metadata": {},
         "user_approved": False,

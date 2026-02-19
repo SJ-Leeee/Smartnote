@@ -27,13 +27,13 @@ class ContentEnhancer:
         self,
         original_content: str,
         analysis: Dict[str, Any],
-        classification: Dict[str, Any]
+        classification: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         내용을 보완합니다.
 
         Args:
-            original_content: 원본 마크다운
+            original_content: raw text or markdown
             analysis: 내용 분석 결과
             classification: 카테고리 분류 결과
 
@@ -75,23 +75,16 @@ related: []
 
         return {
             "enhanced_content": enhanced,
-            "changes": [
-                "YAML frontmatter 추가 (TODO)",
-                "구조 정리 필요 (TODO)"
-            ],
+            "changes": ["YAML frontmatter 추가 (TODO)", "구조 정리 필요 (TODO)"],
             "metadata": {
                 "title": analysis.get("topic", "Untitled"),
                 "category": classification.get("primary_category", "Uncategorized"),
                 "tags": classification.get("recommended_tags", []),
-                "related": []
-            }
+                "related": [],
+            },
         }
 
-    def add_related_links(
-        self,
-        content: str,
-        similar_notes: list
-    ) -> str:
+    def add_related_links(self, content: str, similar_notes: list) -> str:
         """
         연관 노트 링크를 추가합니다.
 
@@ -109,9 +102,7 @@ related: []
 
 
 def enhance_content(
-    original_content: str,
-    analysis: Dict[str, Any],
-    classification: Dict[str, Any]
+    original_content: str, analysis: Dict[str, Any], classification: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     편의 함수: 내용 보완
@@ -132,7 +123,10 @@ def enhance_content(
 if __name__ == "__main__":
     test_content = "# Rust Ownership\n메모리 자동 해제"
     test_analysis = {"topic": "Rust Ownership", "difficulty": "Intermediate"}
-    test_classification = {"primary_category": "Language", "recommended_tags": ["rust", "memory"]}
+    test_classification = {
+        "primary_category": "Language",
+        "recommended_tags": ["rust", "memory"],
+    }
 
     result = enhance_content(test_content, test_analysis, test_classification)
     print("보완 결과:")

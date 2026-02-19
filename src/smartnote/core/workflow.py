@@ -2,35 +2,30 @@
 LangGraph 워크플로우
 
 노트 저장 프로세스를 관리합니다:
-1. analyze_content: 내용 분석
-2. classify_category: 카테고리 분류
-3. enhance_content: 내용 보완
-4. user_feedback: 사용자 피드백
-5. save_note: 저장
+1. enhance_content: 내용 분석 + 보완 (Claude API)
+2. user_feedback: 사용자 피드백
+3. save_note: 저장
+
+[보류] analyze / classify 노드는 Day 5 (Category System) 구현 시 추가 예정
 """
 
-from typing import TypedDict, Annotated, Literal
+from typing import Literal
 from typing_extensions import TypedDict
 
-# TODO: LangGraph 임포트
-# from langgraph.graph import StateGraph, END
+# LangGraph 임포트
+from langgraph.graph import StateGraph, END
 
-from .analyzer import analyze_content
-from .classifier import classify_category
 from .enhancer import enhance_content
 
 
 class NoteState(TypedDict):
     """워크플로우 상태"""
+
     # 입력
     original_content: str
     title: str
     file_path: str
     skip_tistory: bool
-
-    # 분석 결과
-    analysis: dict
-    classification: dict
 
     # 보완 결과
     enhanced_content: str
@@ -44,41 +39,13 @@ class NoteState(TypedDict):
     saved_paths: dict
 
 
-def node_analyze(state: NoteState) -> NoteState:
-    """노드 1: 내용 분석"""
-    print("🔍 내용 분석 중...")
-
-    analysis = analyze_content(
-        content=state["original_content"],
-        title=state["title"]
-    )
-
-    state["analysis"] = analysis
-    return state
-
-
-def node_classify(state: NoteState) -> NoteState:
-    """노드 2: 카테고리 분류"""
-    print("📂 카테고리 분류 중...")
-
-    classification = classify_category(
-        content=state["original_content"],
-        title=state["title"],
-        analysis=state["analysis"]
-    )
-
-    state["classification"] = classification
-    return state
-
-
 def node_enhance(state: NoteState) -> NoteState:
-    """노드 3: 내용 보완"""
+    """노드 1: 내용 분석 + 보완"""
     print("✨ 내용 보완 중...")
 
     result = enhance_content(
         original_content=state["original_content"],
-        analysis=state["analysis"],
-        classification=state["classification"]
+        title=state["title"],
     )
 
     state["enhanced_content"] = result["enhanced_content"]
@@ -87,10 +54,10 @@ def node_enhance(state: NoteState) -> NoteState:
 
 
 def node_feedback(state: NoteState) -> NoteState:
-    """노드 4: 사용자 피드백"""
+    """노드 2: 사용자 피드백"""
     print("\n📋 사용자 피드백 대기...")
 
-    # TODO: Rich로 diff 표시
+    # TODO: Rich로 원본 vs 보완본 diff 표시
     # TODO: 사용자 입력 받기 (Accept/Reject/Edit)
 
     # 임시: 자동 승인
@@ -100,16 +67,17 @@ def node_feedback(state: NoteState) -> NoteState:
 
 
 def node_save(state: NoteState) -> NoteState:
-    """노드 5: 저장"""
+    """노드 3: 저장"""
     print("💾 저장 중...")
 
     # TODO: Obsidian 저장
     # TODO: Tistory 저장 (skip_tistory가 False일 때)
-    # TODO: 서브분류 체크 (10개 이상)
 
     state["saved_paths"] = {
         "obsidian": "/path/to/vault/Category/note.md (TODO)",
-        "tistory": "https://blog.tistory.com/123 (TODO)" if not state["skip_tistory"] else None
+        "tistory": (
+            "https://blog.tistory.com/123 (TODO)" if not state["skip_tistory"] else None
+        ),
     }
 
     return state
@@ -127,71 +95,51 @@ def should_continue(state: NoteState) -> Literal["enhance", "save"]:
 def create_workflow():
     """워크플로우 생성"""
 
-    # TODO: LangGraph로 실제 워크플로우 구성
-    # workflow = StateGraph(NoteState)
-    # workflow.add_node("analyze", node_analyze)
-    # workflow.add_node("classify", node_classify)
-    # workflow.add_node("enhance", node_enhance)
-    # workflow.add_node("feedback", node_feedback)
-    # workflow.add_node("save", node_save)
-    #
-    # workflow.set_entry_point("analyze")
-    # workflow.add_edge("analyze", "classify")
-    # workflow.add_edge("classify", "enhance")
-    # workflow.add_edge("enhance", "feedback")
-    # workflow.add_conditional_edges(
-    #     "feedback",
-    #     should_continue,
-    #     {"enhance": "enhance", "save": "save"}
-    # )
-    # workflow.add_edge("save", END)
-    #
-    # return workflow.compile()
+    workflow = StateGraph(NoteState)
 
-    # 임시: 간단한 순차 실행 함수 반환
-    return simple_workflow
+    # 노드 추가
+    workflow.add_node("enhance", node_enhance)
+    workflow.add_node("feedback", node_feedback)
+    workflow.add_node("save", node_save)
 
+    # 엣지 연결
+    workflow.set_entry_point("enhance")
+    workflow.add_edge("enhance", "feedback")
 
-def simple_workflow(initial_state: NoteState) -> NoteState:
-    """임시 워크플로우 (LangGraph 없이)"""
+    # 조건부 분기: feedback 후 다음 단계 결정
+    workflow.add_conditional_edges(
+        "feedback",
+        should_continue,
+        {"enhance": "enhance", "save": "save"},
+    )
 
-    state = initial_state
+    workflow.add_edge("save", END)
 
-    # 순차 실행
-    state = node_analyze(state)
-    state = node_classify(state)
-    state = node_enhance(state)
-    state = node_feedback(state)
-
-    # 조건부 분기
-    if should_continue(state) == "save":
-        state = node_save(state)
-    else:
-        # 다시 enhance (실제로는 루프)
-        state = node_enhance(state)
-        state = node_save(state)
-
-    return state
+    return workflow.compile()
 
 
 # 테스트 코드
 if __name__ == "__main__":
+    print("🚀 LangGraph 워크플로우 테스트\n")
+
     initial_state: NoteState = {
-        "original_content": "# Test\nContent",
-        "title": "Test",
+        "original_content": "# Rust Ownership\n변수가 scope를 벗어나면 메모리가 자동 해제됨.",
+        "title": "Rust Ownership",
         "file_path": "test.md",
         "skip_tistory": False,
-        "analysis": {},
-        "classification": {},
         "enhanced_content": "",
         "metadata": {},
         "user_approved": False,
         "user_feedback": "",
-        "saved_paths": {}
+        "saved_paths": {},
     }
 
-    workflow = create_workflow()
-    result = workflow(initial_state)
+    app = create_workflow()
+    result = app.invoke(initial_state)
 
-    print("\n✅ 워크플로우 완료!")
-    print(f"저장 경로: {result['saved_paths']}")
+    print("\n" + "=" * 50)
+    print("✅ 워크플로우 완료!")
+    print("=" * 50)
+    print(f"📋 메타데이터: {result['metadata']}")
+    print(f"💾 저장: {result['saved_paths']}")
+    print("=" * 50)
