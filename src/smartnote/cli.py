@@ -85,10 +85,16 @@ def save(
 
     try:
         workflow = create_workflow()
-        result = workflow(initial_state)
+        result = workflow.invoke(initial_state)
 
         # 결과 표시
         console.print("\n[green]✨ 완료![/green]\n")
+
+        # 테스트용: 입력 파일 옆에 _enhanced 저장
+        enhanced_path = path.parent / f"{path.stem}_enhanced{path.suffix}"
+        enhanced_content = result.get("enhanced_content") or content
+        enhanced_path.write_text(enhanced_content, encoding="utf-8")
+        console.print(f"[cyan]📂 로컬 저장: {enhanced_path}[/cyan]")
 
         vault_path = os.getenv("OBSIDIAN_VAULT_PATH", "").strip()
         if vault_path:
@@ -101,9 +107,10 @@ def save(
                 or title
                 or path.stem
             )
-            safe_title = "".join(
-                ch for ch in note_title if ch not in '<>:"/\\|?*'
-            ).strip() or path.stem
+            safe_title = (
+                "".join(ch for ch in note_title if ch not in '<>:"/\\|?*').strip()
+                or path.stem
+            )
 
             obsidian_dir = Path(vault_path) / category
             obsidian_dir.mkdir(parents=True, exist_ok=True)

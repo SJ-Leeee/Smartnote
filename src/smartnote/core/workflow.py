@@ -11,6 +11,10 @@ LangGraph 워크플로우
 
 from typing import Literal
 from typing_extensions import TypedDict
+from rich.panel import Panel
+from rich.console import Console
+
+console = Console()
 
 # LangGraph 임포트
 from langgraph.graph import StateGraph, END
@@ -34,6 +38,7 @@ class NoteState(TypedDict):
     # 사용자 피드백
     user_approved: bool
     user_feedback: str
+    user_feedback_text: str  # ← 추가
 
     # 최종 결과
     saved_paths: dict
@@ -46,6 +51,7 @@ def node_enhance(state: NoteState) -> NoteState:
     result = enhance_content(
         original_content=state["original_content"],
         title=state["title"],
+        feedback=state.get("user_feedback_text", ""),  # key값이 존재하지 않을수도
     )
 
     state["enhanced_content"] = result["enhanced_content"]
@@ -58,11 +64,31 @@ def node_feedback(state: NoteState) -> NoteState:
     print("\n📋 사용자 피드백 대기...")
 
     # TODO: Rich로 원본 vs 보완본 diff 표시
-    # TODO: 사용자 입력 받기 (Accept/Reject/Edit)
+    console.print(
+        Panel(
+            state["enhanced_content"],
+            title="보완 결과 미리보기",
+            border_style="cyan",
+        )
+    )
 
-    # 임시: 자동 승인
-    state["user_approved"] = True
-    state["user_feedback"] = "approved"
+    while True:
+        choice = input("\n[A] Accept  [E] Edit  [Q] Quit > ").strip().upper()
+
+        if choice == "A":
+            state["user_approved"] = True
+            state["user_feedback"] = "approved"
+            break
+        elif choice == "E":
+            feedback_text = input("수정 요청 내용: ").strip()
+            state["user_feedback_text"] = feedback_text
+            state["user_feedback"] = "edit"
+            break
+        elif choice == "Q":
+            raise SystemExit(0)
+        else:
+            print("A, E, Q 중 하나를 입력하세요.")
+
     return state
 
 
@@ -120,18 +146,23 @@ def create_workflow():
 
 # 테스트 코드
 if __name__ == "__main__":
+    from pathlib import Path
+
+    file_path = Path("tmp/react_렌더링_사이클.md")
+    content = file_path.read_text(encoding="utf-8")
     print("🚀 LangGraph 워크플로우 테스트\n")
 
     initial_state: NoteState = {
-        "original_content": "# Rust Ownership\n변수가 scope를 벗어나면 메모리가 자동 해제됨.",
-        "title": "Rust Ownership",
-        "file_path": "test.md",
+        "original_content": content,
+        "title": "react 렌더링 사이클",
+        "file_path": file_path,
         "skip_tistory": False,
         "enhanced_content": "",
         "metadata": {},
         "user_approved": False,
         "user_feedback": "",
         "saved_paths": {},
+        "user_feedback_text": "",
     }
 
     app = create_workflow()

@@ -33,13 +33,16 @@ class ContentEnhancer:
         template = PROMPT_PATH.read_text(encoding="utf-8")
         return template.replace("{today}", today)
 
-    def enhance(self, original_content: str, title: str = "") -> Dict[str, Any]:
+    def enhance(
+        self, original_content: str, title: str = "", feedback: str = ""
+    ) -> Dict[str, Any]:
         """
         내용을 보완합니다.
 
         Args:
             original_content: raw text or 마크다운
             title: 파일명에서 추출한 제목 힌트 (선택)
+            feedback: 요청한 피드백 내용(선택)
 
         Returns:
             {
@@ -54,6 +57,8 @@ class ContentEnhancer:
         user_message = original_content
         if title:
             user_message = f"파일 제목 힌트: {title}\n\n{original_content}"
+        if feedback:
+            user_message = f"\n\n이전 보완본에 대한 수정요청: {feedback}"
 
         tool = {
             "name": "enhance_note",
@@ -106,7 +111,9 @@ class ContentEnhancer:
         return content
 
 
-def enhance_content(original_content: str, title: str = "") -> Dict[str, Any]:
+def enhance_content(
+    original_content: str, title: str = "", feedback: str = ""
+) -> Dict[str, Any]:
     """
     편의 함수: 내용 보완
 
@@ -118,7 +125,7 @@ def enhance_content(original_content: str, title: str = "") -> Dict[str, Any]:
         보완 결과
     """
     enhancer = ContentEnhancer()
-    return enhancer.enhance(original_content, title)
+    return enhancer.enhance(original_content, title, feedback)
 
 
 # 테스트 코드
