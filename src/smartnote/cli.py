@@ -23,8 +23,8 @@ load_dotenv()
 @app.command()
 def save(
     file_path: str = typer.Argument(..., help="저장할 마크다운 경로"),
-    skip_tistory: bool = typer.Option(
-        False, "--skip-tistory", help="티스토리 저장 건너뛰기f"
+    skip_notion: bool = typer.Option(
+        False, "--skip-notion", help="노션 저장 건너뛰기"
     ),
 ):
     """
@@ -32,7 +32,7 @@ def save(
 
     Example:
         smartnote save note.md
-        smartnote save note.md --skip-tistory
+        smartnote save note.md --skip-notion
     """
     console.print(
         Panel.fit(  # 박스형
@@ -75,7 +75,7 @@ def save(
         "original_content": content,
         "title": title,
         "file_path": str(path),
-        "skip_tistory": skip_tistory,
+        "skip_notion": skip_notion,
         "enhanced_content": "",
         "metadata": {},
         "user_approved": False,
@@ -129,10 +129,10 @@ def save(
             console.print(
                 f"[cyan]📂 Obsidian: {result['saved_paths']['obsidian']}[/cyan]"
             )
-        # TODO: tistory에 저장하기
-        if result["saved_paths"].get("tistory"):
+        # TODO: Notion에 저장하기
+        if result["saved_paths"].get("notion"):
             console.print(
-                f"[cyan]🌐 Tistory: {result['saved_paths']['tistory']}[/cyan]"
+                f"[cyan]🌐 Notion: {result['saved_paths']['notion']}[/cyan]"
             )
 
     except Exception as e:

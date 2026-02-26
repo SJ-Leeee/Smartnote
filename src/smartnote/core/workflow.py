@@ -29,7 +29,7 @@ class NoteState(TypedDict):
     original_content: str
     title: str
     file_path: str
-    skip_tistory: bool
+    skip_notion: bool
 
     # 보완 결과
     enhanced_content: str
@@ -97,12 +97,12 @@ def node_save(state: NoteState) -> NoteState:
     print("💾 저장 중...")
 
     # TODO: Obsidian 저장
-    # TODO: Tistory 저장 (skip_tistory가 False일 때)
+    # TODO: Notion 저장 (skip_notion이 False일 때)
 
     state["saved_paths"] = {
         "obsidian": "/path/to/vault/Category/note.md (TODO)",
-        "tistory": (
-            "https://blog.tistory.com/123 (TODO)" if not state["skip_tistory"] else None
+        "notion": (
+            "https://notion.so/page-id (TODO)" if not state["skip_notion"] else None
         ),
     }
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         "original_content": content,
         "title": "react 렌더링 사이클",
         "file_path": file_path,
-        "skip_tistory": False,
+        "skip_notion": False,
         "enhanced_content": "",
         "metadata": {},
         "user_approved": False,
