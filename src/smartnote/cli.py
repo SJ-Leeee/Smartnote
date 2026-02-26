@@ -23,14 +23,13 @@ load_dotenv()
 @app.command()
 def save(
     file_path: str = typer.Argument(..., help="저장할 마크다운 경로"),
-    skip_notion: bool = typer.Option(
-        False, "--skip-notion", help="노션 저장 건너뛰기"
-    ),
+    skip_notion: bool = typer.Option(False, "--skip-notion", help="노션 저장 건너뛰기"),
 ):
     """
     🗃️ 마크다운 노트를 분석하고 저장합니다.
 
     Example:
+        상대경로, 절대경로 OK
         smartnote save note.md
         smartnote save note.md --skip-notion
     """
@@ -90,50 +89,14 @@ def save(
         # 결과 표시
         console.print("\n[green]✨ 완료![/green]\n")
 
-        # 테스트용: 입력 파일 옆에 _enhanced 저장
-        enhanced_path = path.parent / f"{path.stem}_enhanced{path.suffix}"
-        enhanced_content = result.get("enhanced_content") or content
-        enhanced_path.write_text(enhanced_content, encoding="utf-8")
-        console.print(f"[cyan]📂 로컬 저장: {enhanced_path}[/cyan]")
-
-        vault_path = os.getenv("OBSIDIAN_VAULT_PATH", "").strip()
-        if vault_path:
-            category = result.get("classification", {}).get(
-                "primary_category", "Uncategorized"
-            )
-            note_title = (
-                result.get("metadata", {}).get("title")
-                or result.get("title")
-                or title
-                or path.stem
-            )
-            safe_title = (
-                "".join(ch for ch in note_title if ch not in '<>:"/\\|?*').strip()
-                or path.stem
-            )
-
-            obsidian_dir = Path(vault_path) / category
-            obsidian_dir.mkdir(parents=True, exist_ok=True)
-            obsidian_path = obsidian_dir / f"{safe_title}.md"
-            obsidian_content = result.get("enhanced_content") or content
-            obsidian_path.write_text(obsidian_content, encoding="utf-8")
-
-            result.setdefault("saved_paths", {})
-            result["saved_paths"]["obsidian"] = str(obsidian_path)
-        else:
-            console.print(
-                "[yellow]⚠️ OBSIDIAN_VAULT_PATH가 설정되지 않아 Obsidian 저장을 건너뜁니다.[/yellow]"
-            )
-
+        # 저장 결과 출력 (node_save가 saved_paths에 결과를 넣어줌)
         if result["saved_paths"].get("obsidian"):
             console.print(
                 f"[cyan]📂 Obsidian: {result['saved_paths']['obsidian']}[/cyan]"
             )
-        # TODO: Notion에 저장하기
+
         if result["saved_paths"].get("notion"):
-            console.print(
-                f"[cyan]🌐 Notion: {result['saved_paths']['notion']}[/cyan]"
-            )
+            console.print(f"[cyan]🌐 Notion: {result['saved_paths']['notion']}[/cyan]")
 
     except Exception as e:
         console.print(f"\n[red]❌ 오류 발생: {e}[/red]")

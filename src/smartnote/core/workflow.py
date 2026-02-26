@@ -9,6 +9,9 @@ LangGraph 워크플로우
 [보류] analyze / classify 노드는 Day 5 (Category System) 구현 시 추가 예정
 """
 
+from smartnote.storage.obsidian import ObsidianStorage
+from smartnote.storage.notion import NotionStorage
+
 from typing import Literal
 from typing_extensions import TypedDict
 from rich.panel import Panel
@@ -95,17 +98,22 @@ def node_feedback(state: NoteState) -> NoteState:
 def node_save(state: NoteState) -> NoteState:
     """노드 3: 저장"""
     print("💾 저장 중...")
+    saved_paths = {}
+    # Obsidian 저장 (항상)
+    obsidian = ObsidianStorage()
+    obsidian_path = obsidian.save(state["enhanced_content"], state["metadata"])
+    saved_paths["obsidian"] = obsidian_path
 
-    # TODO: Obsidian 저장
-    # TODO: Notion 저장 (skip_notion이 False일 때)
+    # Notion 저장 (skip_notion이 False일 때만)
+    if not state["skip_notion"]:
+        try:
+            notion = NotionStorage()
+            notion_url = notion.save(state["enhanced_content"], state["metadata"])
+            saved_paths["notion"] = notion_url
+        except Exception as e:
+            print(f"⚠️ Notion 저장 실패 (Obsidian은 저장됨): {e}")
 
-    state["saved_paths"] = {
-        "obsidian": "/path/to/vault/Category/note.md (TODO)",
-        "notion": (
-            "https://notion.so/page-id (TODO)" if not state["skip_notion"] else None
-        ),
-    }
-
+    state["saved_paths"] = saved_paths
     return state
 
 
