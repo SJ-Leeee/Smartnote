@@ -18,6 +18,8 @@ from rich.panel import Panel
 from rich.console import Console
 from rich.markdown import Markdown
 
+from prompt_toolkit import prompt  # 한글 전각문제 해결 라이브러리
+
 console = Console()
 
 # LangGraph 임포트
@@ -50,13 +52,14 @@ class NoteState(TypedDict):
 
 def node_enhance(state: NoteState) -> NoteState:
     """노드 1: 내용 분석 + 보완"""
-    print("✨ 내용 보완 중...")
 
-    result = enhance_content(
-        original_content=state["original_content"],
-        title=state["title"],
-        feedback=state.get("user_feedback_text", ""),  # key값이 존재하지 않을수도
-    )
+    with console.status("[cyan]내용 보완 중...[/cyan]", spinner="dots"):
+        result = enhance_content(
+            original_content=state["original_content"],
+            title=state["title"],
+            feedback=state.get("user_feedback_text", ""),  # key값이 존재하지 않을수도
+            previous_enhanced=state.get("enhanced_content", ""),  # 이전 보완된 글
+        )
 
     state["enhanced_content"] = result["enhanced_content"]
     state["metadata"] = result["metadata"]
@@ -66,8 +69,6 @@ def node_enhance(state: NoteState) -> NoteState:
 def node_feedback(state: NoteState) -> NoteState:
     """노드 2: 사용자 피드백"""
     print("\n📋 사용자 피드백 대기...")
-
-    # TODO: Rich로 원본 vs 보완본 diff 표시
     console.print(
         Panel(
             Markdown(state["original_content"]),
@@ -85,14 +86,18 @@ def node_feedback(state: NoteState) -> NoteState:
     )
 
     while True:
-        choice = input("\n[A] Accept  [E] Edit  [Q] Quit > ").strip().upper()
+        console.print(
+            "\n[bold][[green]A[/green]] Accept  [[yellow]E[/yellow]] Edit  [[red]Q[/red]] Quit[/bold]"
+        )
+        choice = prompt(" > ").strip().upper()
 
         if choice == "A":
             state["user_approved"] = True
             state["user_feedback"] = "approved"
             break
         elif choice == "E":
-            feedback_text = input("수정 요청 내용: ").strip()
+            console.print("[yellow]수정 요청 내용을 입력하세요:[/yellow]")
+            feedback_text = prompt(" > ").strip()
             state["user_feedback_text"] = feedback_text
             state["user_feedback"] = "edit"
             break
