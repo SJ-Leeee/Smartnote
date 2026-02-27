@@ -34,7 +34,11 @@ class ContentEnhancer:
         return template.replace("{today}", today)
 
     def enhance(
-        self, original_content: str, title: str = "", feedback: str = ""
+        self,
+        original_content: str,
+        title: str = "",
+        feedback: str = "",
+        previous_enhanced: str = "",
     ) -> Dict[str, Any]:
         """
         내용을 보완합니다.
@@ -57,8 +61,10 @@ class ContentEnhancer:
         user_message = original_content
         if title:
             user_message = f"파일 제목 힌트: {title}\n\n{original_content}"
-        if feedback:
-            user_message = f"\n\n이전 보완본에 대한 수정요청: {feedback}"
+        if feedback:  # 보완본 + 이전내용 유지될수있도록 +=
+            user_message += (
+                f"\n\n이전 보완본:\n{previous_enhanced}\n\n수정 요청:{feedback}"
+            )
 
         tool = {
             "name": "enhance_note",
@@ -112,7 +118,10 @@ class ContentEnhancer:
 
 
 def enhance_content(
-    original_content: str, title: str = "", feedback: str = ""
+    original_content: str,
+    title: str = "",
+    feedback: str = "",
+    previous_enhanced: str = "",
 ) -> Dict[str, Any]:
     """
     편의 함수: 내용 보완
@@ -125,7 +134,7 @@ def enhance_content(
         보완 결과
     """
     enhancer = ContentEnhancer()
-    return enhancer.enhance(original_content, title, feedback)
+    return enhancer.enhance(original_content, title, feedback, previous_enhanced)
 
 
 # 테스트 코드

@@ -18,6 +18,21 @@ load_dotenv()
 - _markdown_to_blocks: 마크다운 → Notion block 배열 변환
 """
 
+LANGUAGE_MAP = {
+    "jsx": "javascript",
+    "tsx": "typescript",
+    "py": "python",
+    "sh": "shell",
+    "zsh": "shell",
+    "bash": "bash",
+    "js": "javascript",
+    "ts": "typescript",
+    "yml": "yaml",
+    "md": "markdown",
+    "tf": "plain text",
+    "cpp": "c++",
+}
+
 
 def _make_heading(level: int, text: str) -> dict:
     heading_type = f"heading_{level}"
@@ -125,6 +140,8 @@ class NotionStorage:
         - 번호 마크다운추가
         - 인용문 마크다운 추가
         - 표 마크다운 추가
+        - 굵게 마크다운 추가
+        - #### 추가.. 없나?
         """
 
         # YAML frontmatter 제거 (--- 로 감싼 부분)
@@ -140,7 +157,8 @@ class NotionStorage:
 
             # 코드블록: ``` 시작 ~ ``` 끝까지 한 블록으로 묶음
             if line.startswith("```"):
-                language = line[3:].strip() or "plain text"
+                raw_lang = line[3:].strip().lower()
+                language = LANGUAGE_MAP.get(raw_lang, raw_lang) or "plain text"
                 code_lines = []
                 i += 1
                 while i < len(lines) and not lines[i].strip().startswith("```"):
