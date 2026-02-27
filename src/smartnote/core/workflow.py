@@ -16,6 +16,7 @@ from typing import Literal
 from typing_extensions import TypedDict
 from rich.panel import Panel
 from rich.console import Console
+from rich.markdown import Markdown
 
 console = Console()
 
@@ -69,8 +70,16 @@ def node_feedback(state: NoteState) -> NoteState:
     # TODO: Rich로 원본 vs 보완본 diff 표시
     console.print(
         Panel(
-            state["enhanced_content"],
-            title="보완 결과 미리보기",
+            Markdown(state["original_content"]),
+            title="[bold yellow]원본[/bold yellow]",
+            border_style="yellow",
+        )
+    )
+
+    console.print(
+        Panel(
+            Markdown(state["enhanced_content"]),
+            title="[bold cyan]보완본[/bold cyan]",
             border_style="cyan",
         )
     )
