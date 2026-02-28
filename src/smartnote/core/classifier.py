@@ -8,11 +8,14 @@ Primary Category + Tags 시스템으로 노트를 분류합니다.
 """
 
 import os
+from pathlib import Path
 from typing import Dict, Any, List
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
+
+PROMPT_PATH = Path(__file__).parent.parent.parent.parent / "prompts" / "classifier.txt"
 
 
 class CategoryClassifier:
@@ -20,63 +23,11 @@ class CategoryClassifier:
 
     def __init__(self, config: Dict[str, Any] = None):
         self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        self.model = "claude-3-5-sonnet-20241022"
-        self.config = config or self._default_config()
-
-    def _default_config(self) -> Dict[str, Any]:
-        """기본 카테고리 설정"""
-        return {
-            "categories": [
-                {
-                    "name": "Algorithm",
-                    "description": "순수 알고리즘 이론 및 구현",
-                    "examples": ["Binary Search", "QuickSort", "Dijkstra"],
-                    "keywords": ["정렬", "탐색", "그래프", "알고리즘"]
-                },
-                {
-                    "name": "Data Structure",
-                    "description": "자료구조",
-                    "examples": ["Red-Black Tree", "Hash Table"],
-                    "keywords": ["트리", "해시", "배열", "자료구조"]
-                },
-                {
-                    "name": "CS",
-                    "description": "컴퓨터 과학 이론",
-                    "examples": ["TCP vs UDP", "Process vs Thread"],
-                    "keywords": ["네트워크", "운영체제", "데이터베이스"]
-                },
-                {
-                    "name": "Language",
-                    "description": "프로그래밍 언어 문법 및 특성",
-                    "examples": ["Rust Ownership", "Python GIL"],
-                    "keywords": ["문법", "언어", "컴파일러"]
-                },
-                {
-                    "name": "DevOps",
-                    "description": "배포, 인프라, CI/CD",
-                    "examples": ["Docker 컨테이너", "GitHub Actions"],
-                    "keywords": ["docker", "배포", "인프라", "cicd"]
-                },
-                {
-                    "name": "AI",
-                    "description": "인공지능, 머신러닝",
-                    "examples": ["RAG 기초", "Transformer 구조"],
-                    "keywords": ["llm", "머신러닝", "딥러닝"]
-                },
-                {
-                    "name": "Tools",
-                    "description": "라이브러리, 프레임워크, 도구",
-                    "examples": ["Typer CLI", "LangChain 사용법"],
-                    "keywords": ["라이브러리", "프레임워크", "도구"]
-                }
-            ]
-        }
+        self.model = "claude-haiku-4-5-20251001"
+        self.system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
 
     def classify(
-        self,
-        content: str,
-        title: str = "",
-        analysis: Dict[str, Any] = None
+        self, content: str, title: str = "", analysis: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
         노트를 분류합니다.
@@ -98,33 +49,74 @@ class CategoryClassifier:
                 "related_categories": ["Language", "Concepts"]
             }
         """
-        # TODO: Few-shot learning 구현
-        # TODO: 기존 카테고리 예시를 프롬프트에 포함
-        # TODO: Claude API로 분류 (Temperature = 0)
-        # TODO: 확신도 계산
-        # TODO: RAG로 유사 노트 참고 (나중에)
-
-        # 임시 반환값
-        return {
-            "primary_category": "Tools",
-            "primary_confidence": 0.65,
-            "suggestions": [
-                {
-                    "category": "Tools",
-                    "confidence": 0.65,
-                    "reason": "라이브러리 사용법 위주"
+        tool = {
+            "name": "classify_note",
+            "description": "노트의 카테고리를 분류합니다.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "primary_category": {
+                        "type": "string",
+                        "enum": [
+                            "Tech & Engineering",
+                            "Computer Science",
+                            "Work & Project",
+                            "Growth & Career",
+                            "Life",
+                        ],
+                    },
+                    "subcategory": {
+                        "type": "string",
+                        "description": "중분류. 기존 목록에 없으면 새 이름제안 가능.",
+                    },
+                    "confidence": {"type": "number"},
+                    "reason": {"type": "string", "description": "분류 근거한 줄"},
+                    "suggestions": {
+                        "type": "array",
+                        "description": "대안 후보 (최대 2개). 확실하면 빈배열.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "primary_category": {"type": "string"},
+                                "subcategory": {"type": "string"},
+                                "confidence": {"type": "number"},
+                                "reason": {"type": "string"},
+                            },
+                            "required": [
+                                "primary_category",
+                                "subcategory",
+                                "confidence",
+                                "reason",
+                            ],
+                        },
+                    },
                 },
-                {
-                    "category": "Language",
-                    "confidence": 0.25,
-                    "reason": "Python 관련 내용"
-                }
-            ],
-            "recommended_tags": ["python", "cli", "library"],
-            "related_categories": ["Language"]
+                "required": [
+                    "primary_category",
+                    "subcategory",
+                    "confidence",
+                    "reason",
+                    "suggestions",
+                ],
+            },
         }
 
-    def suggest_subdivision(self, category: str, notes: List[Dict]) -> Dict[str, Any]:
+        user_message = f"제목: {title}\n\n{content}" if title else content
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=1024,
+            temperature=0,
+            system=self.system_prompt,
+            tools=[tool],  # tool
+            tool_choice={"type": "tool", "name": "classify_note"},
+            messages=[{"role": "user", "content": user_message}],
+        )
+
+        # 임시 반환값
+        return response.content[0].input  # input이 LLM이 tool을 사용한 반환값
+
+        # def suggest_subdivision(self, category: str, notes: List[Dict]) -> Dict[str, Any]:
+        # 추후 고도화 작업
         """
         서브분류 제안 (10개 이상 쌓였을 때)
 
@@ -140,20 +132,10 @@ class CategoryClassifier:
                 ]
             }
         """
-        # TODO: 노트 10개 이상 체크
-        # TODO: Claude API로 서브분류 분석
-        # TODO: 의미 있는 그룹 2-5개 생성
-
-        return {
-            "should_subdivide": False,
-            "subdivisions": []
-        }
 
 
 def classify_category(
-    content: str,
-    title: str = "",
-    analysis: Dict[str, Any] = None
+    content: str, title: str = "", analysis: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
     편의 함수: 카테고리 분류
@@ -172,11 +154,23 @@ def classify_category(
 
 # 테스트 코드
 if __name__ == "__main__":
-    test_content = """
-# Typer와 CLI Boilerplate
+    classifier = CategoryClassifier()
 
-Typer는 Python CLI 애플리케이션을 쉽게 만들 수 있는 라이브러리입니다.
-"""
+    tests = [
+        ("Binary Search 구현", "이진탐색은 O(logN)..."),
+        ("Typer CLI 보일러플레이트", "Typer는 Python CLI 라이브러리..."),
+        ("카프카 비용 절감 회고", "업무 중 카프카 요금이 급증해서..."),
+    ]
 
-    result = classify_category(test_content, "Typer Boilerplate")
-    print("분류 결과:", result)
+    for title, content in tests:
+        result = classifier.classify(content, title)
+        print(f"\n📝 {title}")
+        print(
+            f"   → {result['primary_category']} / {result['subcategory']}({result['confidence']:.0%})"
+        )
+        print(f"   근거: {result['reason']}")
+        if result["suggestions"]:
+            for s in result["suggestions"]:
+                print(
+                    f"   대안: {s['primary_category']} /{s['subcategory']} ({s['confidence']:.0%})"
+                )
