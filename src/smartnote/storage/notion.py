@@ -113,11 +113,12 @@ class NotionStorage:
 
         title = metadata.get("title") or "untitled"
         category = metadata.get("category") or "Uncategorized"
+        subcategory = metadata.get("subcategory") or ""
         tags = metadata.get("tags") or []  # ["python", "oop"]
         summary = metadata.get("summary") or ""
 
         # 전부다 API docs에 있음.
-        return {
+        properties = {
             # title 타입: 반드시 배열 → 텍스트 오브젝트 구조
             "Name": {"title": [{"text": {"content": title}}]},
             # select 타입: name 키에 문자열 하나
@@ -130,6 +131,10 @@ class NotionStorage:
             # date 타입: start에 ISO 날짜 문자열
             "Created": {"date": {"start": today}},
         }
+        if subcategory:  # 서브 카테고리 추가
+            properties["Subcategory"] = {"select": {"name": subcategory}}  #
+
+        return properties
 
     def _markdown_to_blocks(self, content: str) -> list[dict]:
         """

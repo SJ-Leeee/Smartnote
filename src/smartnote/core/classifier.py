@@ -26,9 +26,7 @@ class CategoryClassifier:
         self.model = "claude-haiku-4-5-20251001"
         self.system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
 
-    def classify(
-        self, content: str, title: str = "", analysis: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
+    def classify(self, content: str, title: str = "") -> Dict[str, Any]:
         """
         노트를 분류합니다.
 
