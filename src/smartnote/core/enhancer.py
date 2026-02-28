@@ -103,6 +103,7 @@ class ContentEnhancer:
         return {
             "enhanced_content": data["enhanced_content"],
             "metadata": {
+                # TODO: Enhancer 시 title 재설정 로직
                 "title": data["title"],
                 "tags": data["tags"],
                 "summary": data["summary"],

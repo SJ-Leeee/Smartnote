@@ -11,6 +11,7 @@ LangGraph 워크플로우
 
 from smartnote.storage.obsidian import ObsidianStorage
 from smartnote.storage.notion import NotionStorage
+from .classifier import CategoryClassifier  # .만 붙였을 시 같은 폴더
 
 from typing import Literal
 from typing_extensions import TypedDict
@@ -48,6 +49,55 @@ class NoteState(TypedDict):
 
     # 최종 결과
     saved_paths: dict
+
+
+def _select_category(result: dict) -> tuple[str, str]:
+    """방법4: confidence 기반 카테고리 선택 UX"""
+    primary = result["primary_category"]
+    sub_category = result["subcategory"]
+    confidence = result["confidence"]
+    suggestions = result.get("suggestions", [])
+
+    if confidence > 0.8:
+        console.print(
+            f"\n[green]✅ 카테고리 추천: {primary} / {sub_category}[/green] "
+            f"[dim]({confidence:.0%} - {result['reason']})[/dim]"
+        )
+        answer = prompt("[Y/n] > ").strip().lower()
+        if answer in ("", "y"):
+            return primary, sub_category
+
+    # confidence 낮거나 사용자가 n 입력
+    candidates = [result] + suggestions[:2]  # 1순위 + 2,3 순위
+    console.print("\n[yellow]📊 카테고리 선택:[/yellow]")
+    for i, c in enumerate(candidates, 1):  # 2, 3순위만
+        star = "⭐" if i == 1 else "  "
+        console.print(
+            f"  {i}. [bold]{c['primary_category']} /{c['subcategory']}[/bold] "
+            f"({c['confidence']:.0%}) {star}"
+        )
+        console.print(f"     [dim]{c['reason']}[/dim]")
+    console.print(f"  {len(candidates) + 1}. 직접 입력")
+
+    while True:
+        choice = prompt(f"선택 [1-{len(candidates) + 1}] > ").strip()
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(candidates):
+                c = candidates[idx]
+                return c["primary_category"], c["subcategory"]
+            elif idx == len(candidates):
+                cat = prompt("대분류 > ").strip()
+                sub_category = prompt("중분류 > ").strip()
+                return cat, sub_category
+        console.print("[red]올바른 번호를 입력하세요.[/red]")
+
+
+def _normalize_tag(tag: str) -> str:
+    """영문 태그는 소문자, 한글은 그대로"""
+    if any("\uac00" <= c <= "\ud7a3" for c in tag):
+        return tag.strip()
+    return tag.lower().strip()
 
 
 def node_enhance(state: NoteState) -> NoteState:
@@ -92,6 +142,32 @@ def node_feedback(state: NoteState) -> NoteState:
         choice = prompt(" > ").strip().upper()
 
         if choice == "A":
+            # 1. 카테고리 호출 (글 작성을 Accept 했을 때)
+            with console.status(
+                "[magenta]카테고리 분류 중...[/magenta]", spinner="dots"
+            ):
+                classifier = CategoryClassifier()
+                result = classifier.classify(
+                    state["enhanced_content"], state["metadata"].get("title", "")
+                )
+
+            # 2. 카테고리 선택  UX
+            category, subcategory = _select_category(result)
+            state["metadata"]["category"] = category
+            state["metadata"]["subcategory"] = subcategory
+
+            # 3. 태그 추가 UX
+            existing_tags = state["metadata"].get("tags", [])
+            console.print(f"\n[cyan]🏷️  적용 태그: {','.join(existing_tags)}[/cyan]")
+
+            # TODO: 이 부분 UX 수정
+            extra = prompt("추가할 태그? (없으면 Enter) > ").strip()
+            added = [t.strip() for t in extra.split(",") if t.strip()] if extra else []
+            all_tags = existing_tags + added
+            # 소문자 정규화
+            state["metadata"]["tags"] = [_normalize_tag(t) for t in all_tags]
+
+            # 4. 승인
             state["user_approved"] = True
             state["user_feedback"] = "approved"
             break

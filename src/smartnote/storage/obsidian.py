@@ -21,10 +21,16 @@ class ObsidianStorage:
     def save(self, content: str, metadata: dict) -> str:
         title = metadata.get("title") or "untitled"  # 제목 없으면 기본값
         category = metadata.get("category") or "Uncategorized"  # Day5 전까지 기본값
+        subcategory = metadata.get("subcategory") or ""  # Day5 전까지 기본값
 
-        content = self._inject_dates(content)  # frontmatter에 날짜 보강
+        content = self._inject_dates(content, metadata)  # frontmatter에 날짜 보강
         filename = self._build_filename(title)  # "2026-02-26-제목.md" 생성
-        directory = self.vault / category  # vault/Uncategorized 경로 조합
+
+        directory = (
+            self.vault / category / subcategory
+            if subcategory
+            else self.vault / category
+        )  # vault/Uncategorized 경로 조합
         directory.mkdir(parents=True, exist_ok=True)  # 폴더 없으면 생성
 
         save_path = self._resolve_path(directory, filename)  # 중복 파일명 처리
@@ -38,7 +44,7 @@ class ObsidianStorage:
         slug = slug.lower()
         return f"{today}-{slug}.md"
 
-    def _inject_dates(self, content: str) -> str:
+    def _inject_dates(self, content: str, metadata: dict = None) -> str:
         """
         처리 흐름:
         1. content 앞에 "---\n...\n---\n" 패턴 찾기 (frontmatter 유무 확인)
@@ -55,7 +61,8 @@ class ObsidianStorage:
         match = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", content, re.DOTALL)
         if not match:
             # frontmatter 자체가 없는 경우
-            header = f"---\ncreated: {today}\nupdated: {today}\n---\n\n"
+            tags = metadata.get("tags", []) if metadata else []
+            header = f"---\ncreated: {today}\nupdated: {today}\ntags: {tags}\n---\n\n"
             return header + content
 
         fm_text = match.group(1)  # --- 사이의 텍스트만 추출
@@ -64,6 +71,8 @@ class ObsidianStorage:
         if "created" not in fm:
             fm["created"] = today
         fm["updated"] = today  # 항상 갱신
+        if metadata and metadata.get("tags"):
+            fm["tags"] = metadata["tags"]  # 사용자가 추가한 태그 포함하여 덮어쓰기
 
         new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
         new_header = f"---\n{new_fm}\n---\n"
