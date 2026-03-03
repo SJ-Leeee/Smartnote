@@ -18,12 +18,12 @@ class ObsidianStorage:
             raise ValueError("obsidian vault path가 설정되지 않았습니다.")
         self.vault = Path(path)
 
-    def save(self, content: str, metadata: dict) -> str:
+    def save(self, content: str, metadata: dict, related_notes: list = []) -> str:
         title = metadata.get("title") or "untitled"  # 제목 없으면 기본값
         category = metadata.get("category") or "Uncategorized"  # Day5 전까지 기본값
         subcategory = metadata.get("subcategory") or ""  # Day5 전까지 기본값
-
-        content = self._inject_dates(content, metadata)  # frontmatter에 날짜 보강
+        # frontmatter에 날짜 보강, 관련노트 추가
+        content = self._reinforce_fm(content, metadata, related_notes)
         filename = self._build_filename(title)  # "2026-02-26-제목.md" 생성
 
         directory = (
@@ -44,7 +44,9 @@ class ObsidianStorage:
         slug = slug.lower()
         return f"{today}-{slug}.md"
 
-    def _inject_dates(self, content: str, metadata: dict = None) -> str:
+    def _reinforce_fm(
+        self, content: str, metadata: dict = None, related_notes: list = []
+    ) -> str:
         """
         처리 흐름:
         1. content 앞에 "---\n...\n---\n" 패턴 찾기 (frontmatter 유무 확인)
@@ -60,9 +62,13 @@ class ObsidianStorage:
 
         match = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", content, re.DOTALL)
         if not match:
+            related_links = [f'  - "[[{n["title"]}]]"' for n in related_notes]
+            related_str = (
+                "related:\n" + "\n".join(related_links) if related_links else ""
+            )
             # frontmatter 자체가 없는 경우
             tags = metadata.get("tags", []) if metadata else []
-            header = f"---\ncreated: {today}\nupdated: {today}\ntags: {tags}\n---\n\n"
+            header = f"---\ncreated: {today}\nupdated: {today}\ntags: {tags}\n{related_str}\n---\n\n"
             return header + content
 
         fm_text = match.group(1)  # --- 사이의 텍스트만 추출
@@ -73,6 +79,8 @@ class ObsidianStorage:
         fm["updated"] = today  # 항상 갱신
         if metadata and metadata.get("tags"):
             fm["tags"] = metadata["tags"]  # 사용자가 추가한 태그 포함하여 덮어쓰기
+        if related_notes:
+            fm["related"] = [f'[[{n["title"]}]]' for n in related_notes]
 
         new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
         new_header = f"---\n{new_fm}\n---\n"

@@ -9,6 +9,8 @@ LangGraph 워크플로우
 [보류] analyze / classify 노드는 Day 5 (Category System) 구현 시 추가 예정
 """
 
+import uuid
+from smartnote.rag.embedding_store import EmbeddingStore
 from smartnote.storage.obsidian import ObsidianStorage
 from smartnote.storage.notion import NotionStorage
 from .classifier import CategoryClassifier  # .만 붙였을 시 같은 폴더
@@ -22,6 +24,8 @@ from rich.markdown import Markdown
 from prompt_toolkit import prompt  # 한글 전각문제 해결 라이브러리
 
 console = Console()
+# 임베딩 DB 초기화
+store = EmbeddingStore()
 
 # LangGraph 임포트
 from langgraph.graph import StateGraph, END
@@ -188,10 +192,13 @@ def node_feedback(state: NoteState) -> NoteState:
 def node_save(state: NoteState) -> NoteState:
     """노드 3: 저장"""
     print("💾 저장 중...")
+    related_notes = store.search_related(state["enhanced_content"], top_k=3)
     saved_paths = {}
     # Obsidian 저장 (항상)
     obsidian = ObsidianStorage()
-    obsidian_path = obsidian.save(state["enhanced_content"], state["metadata"])
+    obsidian_path = obsidian.save(
+        state["enhanced_content"], state["metadata"], related_notes
+    )
     saved_paths["obsidian"] = obsidian_path
 
     # Notion 저장 (skip_notion이 False일 때만)
@@ -202,6 +209,18 @@ def node_save(state: NoteState) -> NoteState:
             saved_paths["notion"] = notion_url
         except Exception as e:
             print(f"⚠️ Notion 저장 실패 (Obsidian은 저장됨): {e}")
+    # 저장 후 임베딩 DB에도 저장
+    store.add_note(
+        note_id=str(uuid.uuid4()),
+        content=state["enhanced_content"],
+        metadata={
+            "title": state["title"],
+            "category": state["metadata"].get("category", ""),
+            "subcategory": state["metadata"].get("subcategory", ""),
+            "tags": ", ".join(state["metadata"].get("tags", [])),
+            "file_path": str(obsidian_path),
+        },
+    )
 
     state["saved_paths"] = saved_paths
     return state
