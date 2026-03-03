@@ -81,3 +81,5 @@ docs
 
 # prompt
 prompts/
+
+.chroma_db
