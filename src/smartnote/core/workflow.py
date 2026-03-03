@@ -5,11 +5,8 @@ LangGraph 워크플로우
 1. enhance_content: 내용 분석 + 보완 (Claude API)
 2. user_feedback: 사용자 피드백
 3. save_note: 저장
-
-[보류] analyze / classify 노드는 Day 5 (Category System) 구현 시 추가 예정
 """
 
-import uuid
 from smartnote.rag.embedding_store import EmbeddingStore
 from smartnote.storage.obsidian import ObsidianStorage
 from smartnote.storage.notion import NotionStorage
@@ -192,7 +189,11 @@ def node_feedback(state: NoteState) -> NoteState:
 def node_save(state: NoteState) -> NoteState:
     """노드 3: 저장"""
     print("💾 저장 중...")
-    related_notes = store.search_related(state["enhanced_content"], top_k=3)
+    related_notes = store.search_related(
+        state["enhanced_content"],
+        top_k=3,
+        cur_title=state["metadata"].get("title", state["title"]),
+    )
     saved_paths = {}
     # Obsidian 저장 (항상)
     obsidian = ObsidianStorage()
@@ -211,10 +212,10 @@ def node_save(state: NoteState) -> NoteState:
             print(f"⚠️ Notion 저장 실패 (Obsidian은 저장됨): {e}")
     # 저장 후 임베딩 DB에도 저장
     store.add_note(
-        note_id=str(uuid.uuid4()),
+        note_id=str(obsidian_path),  # 같은 이름일 시 UPSERT
         content=state["enhanced_content"],
         metadata={
-            "title": state["title"],
+            "title": state["metadata"].get("title", state["title"]),
             "category": state["metadata"].get("category", ""),
             "subcategory": state["metadata"].get("subcategory", ""),
             "tags": ", ".join(state["metadata"].get("tags", [])),

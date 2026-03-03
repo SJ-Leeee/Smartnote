@@ -34,7 +34,9 @@ class EmbeddingStore:
         # content를 임베딩 → ChromaDB에 저장
         # metadata: title, category, subcategory, tags, file_path
 
-    def search_related(self, content: str, top_k: int = 3) -> list[dict]:
+    def search_related(
+        self, content: str, top_k: int = 3, cur_title: str = ""
+    ) -> list[dict]:
         embedding = self.model.encode(content).tolist()
         results = self.collection.query(
             query_embeddings=[embedding],
@@ -47,6 +49,11 @@ class EmbeddingStore:
             # TODO: 유사도가 너무 낮을시는 제외. 노트별 유사도 확인해보고 수치설정
             # if results["distances"][0][i] > 0.5:
             #     continue
+
+            # 자기 자신과 이름이 같으면 pass
+            if metadata.get("title") == cur_title:
+                continue
+
             output.append(
                 {
                     "title": metadata.get("title", ""),

@@ -62,7 +62,10 @@ class ObsidianStorage:
 
         match = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", content, re.DOTALL)
         if not match:
-            related_links = [f'  - "[[{n["title"]}]]"' for n in related_notes]
+            related_links = [
+                f'  - "[[{Path(n["file_path"]).stem}|{n["title"]}]]"'
+                for n in related_notes
+            ]
             related_str = (
                 "related:\n" + "\n".join(related_links) if related_links else ""
             )
@@ -80,7 +83,9 @@ class ObsidianStorage:
         if metadata and metadata.get("tags"):
             fm["tags"] = metadata["tags"]  # 사용자가 추가한 태그 포함하여 덮어쓰기
         if related_notes:
-            fm["related"] = [f'[[{n["title"]}]]' for n in related_notes]
+            fm["related"] = [
+                f'[[{Path(n["file_path"]).stem}|{n["title"]}]]' for n in related_notes
+            ]
 
         new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
         new_header = f"---\n{new_fm}\n---\n"
