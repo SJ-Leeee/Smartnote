@@ -53,7 +53,7 @@ class EmbeddingStore:
         output = []
         for i, metadata in enumerate(results["metadatas"][0]):
             # TODO: 유사도가 너무 낮을시는 제외. 노트별 유사도 확인해보고 수치설정
-            if results["distances"][0][i] < 0.5:
+            if results["distances"][0][i] > 0.5:
                 continue
 
             # 자기 자신과 이름이 같으면 pass

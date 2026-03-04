@@ -90,8 +90,10 @@ class NotionStorage:
 
         # 4. 본문 블록 추가
         blocks = self._markdown_to_blocks(body)
-        if blocks:
-            self.client.blocks.children.append(block_id=page_id, children=blocks)
+        CHUNK_SIZE = 100  # notion은 최대 100개 블록 제한이 있다.
+        for i in range(0, len(blocks), CHUNK_SIZE):
+            chunk = blocks[i : i + CHUNK_SIZE]
+            self.client.blocks.children.append(block_id=page_id, children=chunk)
 
         # 5. 페이지 URL 반환
         return response["url"]
@@ -147,6 +149,7 @@ class NotionStorage:
         - 표 마크다운 추가
         - 굵게 마크다운 추가
         - #### 추가.. 없나?
+        - #태그 처리
         """
 
         # YAML frontmatter 제거 (--- 로 감싼 부분)

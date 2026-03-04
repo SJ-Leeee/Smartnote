@@ -90,7 +90,7 @@ class ContentEnhancer:
 
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=4096,
+            max_tokens=8192,
             temperature=0,
             system=self.system_prompt,
             tools=[tool],
