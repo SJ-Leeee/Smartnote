@@ -13,7 +13,9 @@ from dotenv import load_dotenv
 from smartnote.core.workflow import create_workflow, NoteState
 
 
-app = typer.Typer(name="smartnote", help=f"🤖 지식노트 분석가공저장 서비스 With AI")
+app = typer.Typer(
+    name="smartnote", help=f"📈 글을 가공하여 알맞는 카테고리에 자동으로 저장하는 도구"
+)
 
 console = Console()
 load_dotenv()
@@ -79,6 +81,7 @@ def save(
         "metadata": {},
         "user_approved": False,
         "user_feedback": "",
+        "user_feedback_text": "",
         "saved_paths": {},
     }
 
