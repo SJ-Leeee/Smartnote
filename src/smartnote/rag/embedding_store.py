@@ -38,6 +38,12 @@ class EmbeddingStore:
         self, content: str, top_k: int = 3, cur_title: str = ""
     ) -> list[dict]:
         embedding = self.model.encode(content).tolist()
+
+        # 만약 3개보다 적을경우
+        all_note_cnt = self.collection.count()
+        if all_note_cnt < 3:
+            top_k = all_note_cnt
+
         results = self.collection.query(
             query_embeddings=[embedding],
             n_results=top_k,
@@ -47,8 +53,8 @@ class EmbeddingStore:
         output = []
         for i, metadata in enumerate(results["metadatas"][0]):
             # TODO: 유사도가 너무 낮을시는 제외. 노트별 유사도 확인해보고 수치설정
-            # if results["distances"][0][i] > 0.5:
-            #     continue
+            if results["distances"][0][i] > 0.5:
+                continue
 
             # 자기 자신과 이름이 같으면 pass
             if metadata.get("title") == cur_title:

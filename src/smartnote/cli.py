@@ -13,7 +13,9 @@ from dotenv import load_dotenv
 from smartnote.core.workflow import create_workflow, NoteState
 
 
-app = typer.Typer(name="smartnote", help=f"🤖 지식노트 분석가공저장 서비스 With AI")
+app = typer.Typer(
+    name="smartnote", help=f"📈 글을 가공하여 알맞는 카테고리에 자동으로 저장하는 도구"
+)
 
 console = Console()
 load_dotenv()
@@ -53,7 +55,11 @@ def save(
         content = f.read()
 
     console.print(f"[green]✅ 파일 읽기 완료 ({len(content)} Bytes)[/green]")
-
+    # TODO: 청킹고려
+    if len(content) > 8000:
+        console.print(
+            f"[yellow]⚠️  파일이 큽니다 ({len(content)} bytes). 향상 품질이 저하될 수 있습니다.[/yellow]"
+        )
     # 제목 추출 (첫 # 라인)
     lines = content.split("\n")
     title = next(
@@ -79,6 +85,7 @@ def save(
         "metadata": {},
         "user_approved": False,
         "user_feedback": "",
+        "user_feedback_text": "",
         "saved_paths": {},
     }
 
