@@ -55,7 +55,11 @@ def save(
         content = f.read()
 
     console.print(f"[green]✅ 파일 읽기 완료 ({len(content)} Bytes)[/green]")
-
+    # TODO: 청킹고려
+    if len(content) > 8000:
+        console.print(
+            f"[yellow]⚠️  파일이 큽니다 ({len(content)} bytes). 향상 품질이 저하될 수 있습니다.[/yellow]"
+        )
     # 제목 추출 (첫 # 라인)
     lines = content.split("\n")
     title = next(
