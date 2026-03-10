@@ -1,6 +1,9 @@
 """SmartNote CLI - 메인 진입점"""
 
 import os
+import re
+import time
+from prompt_toolkit.shortcuts.progress_bar import Progress
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -9,8 +12,20 @@ from rich.table import Table
 from pathlib import Path
 from dotenv import load_dotenv
 
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    BarColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
+import yaml
+
 # Core modules
+from smartnote.core.classifier import CategoryClassifier
 from smartnote.core.workflow import create_workflow, NoteState
+from smartnote.rag.embedding_store import EmbeddingStore
+from smartnote.storage.obsidian import ObsidianStorage
 
 
 app = typer.Typer(
@@ -111,32 +126,139 @@ def save(
 
 
 @app.command()
-def list(
-    category: str = typer.Option(None, "--category", "-c", help="카테고리 필터"),
-    limit: int = typer.Option(20, "--limit", "-l", help="표시 개수"),
+def bulk(
+    directory: str = typer.Argument(..., help="스캔할 디렉토리 경로"),
 ):
     """
-    저장된 노트 목록을 보여줍니다.
+    디렉토리 내 .md 파일을 일괄 분류 + 임베딩합니다. (enhance/Notion 저장 없음)
 
     Example:
-        smartnote list
-        smartnote list --category "Language"
+        smartnote bulk /Users/iseungjun/Lee/SmartNote
+        smartnote bulk tmp/
     """
-    console.print(Panel.fit("📚 저장된 노트 목록", border_style="green"))
 
-    # TODO: 실제 노트 목록 가져오기
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("날짜", style="dim")
-    table.add_column("제목")
-    table.add_column("카테고리", style="cyan")
-    table.add_column("태그", style="yellow")
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        console.print(f"[red]🚫 디렉토리를 찾을 수 없습니다: {directory}[/red]")
+        raise typer.Exit(code=1)
 
-    # 예시 데이터
-    table.add_row("2026-02-13", "Rust Ownership", "Language/Rust", "ownership, memory")
-    table.add_row("2026-02-12", "RAG 기초", "AI/LLM", "rag, vector-db")
+    md_files = list(dir_path.rglob("*.md"))
+    console.print(
+        Panel.fit(
+            f"📂 {directory}\n총 [cyan]{len(md_files)}[/cyan]개 파일 발견",
+            title="SmartNote Bulk",
+            border_style="blue",
+        )
+    )
 
-    console.print(table)
-    console.print(f"\n[dim](TODO: 실제 데이터 표시, 필터 적용)[/dim]")
+    classifier = CategoryClassifier()
+    obsidian = ObsidianStorage()
+    store = EmbeddingStore()
+
+    success, skipped, failed = 0, 0, 0
+    failed_files = []
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("처리 중...", total=len(md_files))
+
+        for file_path in md_files:
+            progress.update(task, description=f"[cyan]{file_path.name[:40]}[/cyan]")
+
+            try:
+                note_id = str(file_path.resolve())
+
+                # 이미 임베딩된 파일 스킵
+                if store.is_embedded(note_id):
+                    skipped += 1
+                    progress.advance(task)
+                    continue
+
+                content = file_path.read_text(encoding="utf-8")
+                if not content.strip():
+                    skipped += 1
+                    progress.advance(task)
+                    continue
+
+                # 기존 frontmatter에서 태그 추출
+                match = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", content, re.DOTALL)
+                existing_tags = []
+                if match:
+                    fm = yaml.safe_load(match.group(1)) or {}
+                    existing_tags = fm.get("tags", []) or []
+
+                # 제목 추출 (frontmatter title → 첫 # 헤딩 → 파일명 순)
+                title = file_path.stem
+                if match:
+                    fm_title = (yaml.safe_load(match.group(1)) or {}).get("title")
+                    if fm_title:
+                        title = fm_title
+                if title == file_path.stem:
+                    lines = content.split("\n")
+                    heading = next(
+                        (l.strip("# ").strip() for l in lines if l.startswith("# ")),
+                        None,
+                    )
+                    if heading:
+                        title = heading
+
+                # 분류 (confidence ≤ 0.8 이면 etc)
+                result = classifier.classify(content[:3000], title)
+                if result["confidence"] > 0.8 and result["primary_category"] != "etc":
+                    category = result["primary_category"]
+                    subcategory = result["subcategory"]
+                else:
+                    category = "etc"
+                    subcategory = "Uncategorized"
+
+                # vault에 새 파일 생성 (원본 건드리지 않음)
+                metadata = {
+                    "title": title,
+                    "category": category,
+                    "subcategory": subcategory,
+                    "tags": existing_tags,
+                }
+                obsidian_path = obsidian.save(content, metadata)
+
+                # ChromaDB 임베딩
+                store.add_note(
+                    note_id=note_id,
+                    content=content[:3000],
+                    metadata={
+                        "title": title,
+                        "category": category,
+                        "subcategory": subcategory,
+                        "tags": ", ".join(str(t) for t in existing_tags),
+                        "file_path": str(obsidian_path),
+                    },
+                )
+
+                success += 1
+                time.sleep(0.3)
+
+            except Exception as e:
+                failed += 1
+                failed_files.append(f"{file_path}: {e}")
+
+            progress.advance(task)
+
+    # 결과 요약
+    console.print(
+        f"\n[green]✅ 성공: {success}[/green]  "
+        f"[yellow]스킵: {skipped}[/yellow]  "
+        f"[red]실패: {failed}[/red]"
+    )
+
+    if failed_files:
+        log_path = Path("failed_migrations.log")
+        log_path.write_text("\n".join(failed_files), encoding="utf-8")
+        console.print(f"[red]실패 목록: {log_path}[/red]")
 
 
 @app.command()

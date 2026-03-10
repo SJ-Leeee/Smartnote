@@ -212,7 +212,7 @@ def node_save(state: NoteState) -> NoteState:
             print(f"⚠️ Notion 저장 실패 (Obsidian은 저장됨): {e}")
     # 저장 후 임베딩 DB에도 저장
     store.add_note(
-        note_id=str(obsidian_path),  # 같은 이름일 시 UPSERT
+        note_id=str(Path(state["file_path"]).resolve()),  # 같은 이름일 시 UPSERT
         content=state["enhanced_content"],
         metadata={
             "title": state["metadata"].get("title", state["title"]),

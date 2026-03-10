@@ -61,6 +61,7 @@ class CategoryClassifier:
                             "Work & Project",
                             "Growth & Career",
                             "Life",
+                            "Etc",
                         ],
                     },
                     "subcategory": {
