@@ -7,6 +7,8 @@ LangGraph 워크플로우
 3. save_note: 저장
 """
 
+import time
+from pathlib import Path
 from smartnote.rag.embedding_store import EmbeddingStore
 from smartnote.storage.obsidian import ObsidianStorage
 from smartnote.storage.notion import NotionStorage
@@ -20,14 +22,14 @@ from rich.markdown import Markdown
 
 from prompt_toolkit import prompt  # 한글 전각문제 해결 라이브러리
 
-console = Console()
-# 임베딩 DB 초기화
-store = EmbeddingStore()
-
 # LangGraph 임포트
 from langgraph.graph import StateGraph, END
 
 from .enhancer import enhance_content
+
+console = Console()
+# 임베딩 DB 초기화
+store = EmbeddingStore()
 
 
 class NoteState(TypedDict):
@@ -143,6 +145,7 @@ def node_feedback(state: NoteState) -> NoteState:
         choice = prompt(" > ").strip().upper()
 
         if choice == "A":
+            t0 = time.time()  # 현재시간
             # 1. 카테고리 호출 (글 작성을 Accept 했을 때)
             with console.status(
                 "[magenta]카테고리 분류 중...[/magenta]", spinner="dots"
@@ -151,7 +154,9 @@ def node_feedback(state: NoteState) -> NoteState:
                 result = classifier.classify(
                     state["enhanced_content"], state["metadata"].get("title", "")
                 )
-
+            classify_time = time.time() - t0
+            console.print(f"[dim]⏱ classify: {classify_time:.2f}s[/dim]")
+            state["metadata"]["_classify_time"] = classify_time  # 분류시간 state에 저장
             # 2. 카테고리 선택  UX
             category, subcategory = _select_category(result)
             state["metadata"]["category"] = category
@@ -188,12 +193,18 @@ def node_feedback(state: NoteState) -> NoteState:
 
 def node_save(state: NoteState) -> NoteState:
     """노드 3: 저장"""
+    t0 = time.time()
     print("💾 저장 중...")
     related_notes = store.search_related(
         state["enhanced_content"],
         top_k=3,
         cur_title=state["metadata"].get("title", state["title"]),
     )
+    find_related_time = time.time() - t0
+    console.print(f"[dim]⏱ find_related: {find_related_time:.2f}s[/dim]")  # db접근 시간
+
+    total = state["metadata"].get("_classify_time", 0) + find_related_time
+    console.print(f"[dim]⏱ classify + find_related 합계: {total:.2f}s[/dim]")  # 합산
     saved_paths = {}
     # Obsidian 저장 (항상)
     obsidian = ObsidianStorage()
