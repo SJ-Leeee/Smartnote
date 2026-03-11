@@ -7,12 +7,14 @@ LangGraph 워크플로우
 3. save_note: 저장
 """
 
+import time
+from pathlib import Path
 from smartnote.rag.embedding_store import EmbeddingStore
 from smartnote.storage.obsidian import ObsidianStorage
 from smartnote.storage.notion import NotionStorage
 from .classifier import CategoryClassifier  # .만 붙였을 시 같은 폴더
 
-from typing import Literal
+from typing import Annotated, Literal
 from typing_extensions import TypedDict
 from rich.panel import Panel
 from rich.console import Console
@@ -20,14 +22,19 @@ from rich.markdown import Markdown
 
 from prompt_toolkit import prompt  # 한글 전각문제 해결 라이브러리
 
-console = Console()
-# 임베딩 DB 초기화
-store = EmbeddingStore()
-
 # LangGraph 임포트
 from langgraph.graph import StateGraph, END
 
 from .enhancer import enhance_content
+
+console = Console()
+# 임베딩 DB 초기화
+store = EmbeddingStore()
+
+
+def _merge_dict(a: dict, b: dict) -> dict:
+    """Annotated 키 덮어쓰는 방식 정의"""
+    return {**a, **b}
 
 
 class NoteState(TypedDict):
@@ -41,7 +48,7 @@ class NoteState(TypedDict):
 
     # 보완 결과
     enhanced_content: str
-    metadata: dict
+    metadata: Annotated[dict, _merge_dict]  # 병렬접근
 
     # 사용자 피드백
     user_approved: bool
@@ -50,6 +57,10 @@ class NoteState(TypedDict):
 
     # 최종 결과
     saved_paths: dict
+
+    # 병렬화
+    related_notes: list
+    classify_result: dict  # node_classify의 raw LLM 결과
 
 
 def _select_category(result: dict) -> tuple[str, str]:
@@ -143,32 +154,8 @@ def node_feedback(state: NoteState) -> NoteState:
         choice = prompt(" > ").strip().upper()
 
         if choice == "A":
-            # 1. 카테고리 호출 (글 작성을 Accept 했을 때)
-            with console.status(
-                "[magenta]카테고리 분류 중...[/magenta]", spinner="dots"
-            ):
-                classifier = CategoryClassifier()
-                result = classifier.classify(
-                    state["enhanced_content"], state["metadata"].get("title", "")
-                )
-
-            # 2. 카테고리 선택  UX
-            category, subcategory = _select_category(result)
-            state["metadata"]["category"] = category
-            state["metadata"]["subcategory"] = subcategory
-
-            # 3. 태그 추가 UX
-            existing_tags = state["metadata"].get("tags", [])
-            console.print(f"\n[cyan]🏷️  적용 태그: {','.join(existing_tags)}[/cyan]")
-
-            # TODO: 이 부분 UX 수정
-            extra = prompt("추가할 태그? (없으면 Enter) > ").strip()
-            added = [t.strip() for t in extra.split(",") if t.strip()] if extra else []
-            all_tags = existing_tags + added
-            # 소문자 정규화
-            state["metadata"]["tags"] = [_normalize_tag(t) for t in all_tags]
-
-            # 4. 승인
+            # 카테고리화 + 선택UX + 태그선택UX
+            # 승인
             state["user_approved"] = True
             state["user_feedback"] = "approved"
             break
@@ -186,19 +173,88 @@ def node_feedback(state: NoteState) -> NoteState:
     return state
 
 
-def node_save(state: NoteState) -> NoteState:
-    """노드 3: 저장"""
-    print("💾 저장 중...")
+def node_classify(state: NoteState) -> NoteState:
+    t0 = time.time()  # 현재시간
+    # 1. 카테고리 호출 (글 작성을 Accept 했을 때)
+    with console.status("[magenta]카테고리 분류 중...[/magenta]", spinner="dots"):
+        classifier = CategoryClassifier()
+        result = classifier.classify(
+            state["enhanced_content"], state["metadata"].get("title", "")
+        )
+    classify_time = time.time() - t0
+    console.print(f"[dim]⏱ classify: {classify_time:.2f}s[/dim]")
+    state["metadata"]["_classify_time"] = classify_time  # 분류시간 state에 저장
+    # 카테고리 UX 삭제
+    return {
+        "classify_result": result,
+        "metadata": {
+            **state["metadata"],
+            "_classify_time": classify_time,
+        },
+    }
+
+
+def node_find_related(state: NoteState) -> NoteState:
+    t0 = time.time()
     related_notes = store.search_related(
         state["enhanced_content"],
         top_k=3,
         cur_title=state["metadata"].get("title", state["title"]),
     )
+    find_related_time = time.time() - t0
+    console.print(f"[dim]⏱ find_related: {find_related_time:.2f}s[/dim]")  # db접근 시간
+    return {
+        "related_notes": related_notes,
+        "metadata": {**state["metadata"], "_find_related_time": find_related_time},
+    }
+
+
+def node_user_input(state: NoteState) -> dict:
+    """병렬작업끝나고 UX종합 실행"""
+    # 카테고리 선택
+    category, subcategory = _select_category(state["classify_result"])
+    # 태그
+    new_metadata = _node_add_tags(state)
+
+    classify_t = state["metadata"].get("_classify_time", 0)
+    find_t = state["metadata"].get("_find_related_time", 0)
+    wall_time = max(classify_t, find_t)  # 실제 병렬 소요 시간
+    console.print(
+        f"[dim]⏱ classify: {classify_t:.2f}s | find_related: {find_t:.2f}s | 병렬 소요: {wall_time:.2f}s[/dim]"
+    )
+
+    return {
+        "metadata": {
+            **new_metadata,
+            "category": category,
+            "subcategory": subcategory,
+        }
+    }
+
+
+def _node_add_tags(state: NoteState) -> NoteState:
+    """태그 추가 UX"""
+    existing_tags = state["metadata"].get("tags", [])
+    console.print(f"\n[cyan]🏷️  적용 태그: {','.join(existing_tags)}[/cyan]")
+    # TODO: 이 부분 UX 수정
+    extra = prompt("추가할 태그? (없으면 Enter) > ").strip()
+    added = [t.strip() for t in extra.split(",") if t.strip()] if extra else []
+    # 소문자 정규화
+    state["metadata"]["tags"] = [_normalize_tag(t) for t in existing_tags + added]
+    return {
+        **state["metadata"],
+        "tags": [_normalize_tag(t) for t in existing_tags + added],
+    }
+
+
+def node_save(state: NoteState) -> NoteState:
+    """노드 3: 저장"""
+    print("💾 저장 중...")
     saved_paths = {}
     # Obsidian 저장 (항상)
     obsidian = ObsidianStorage()
     obsidian_path = obsidian.save(
-        state["enhanced_content"], state["metadata"], related_notes
+        state["enhanced_content"], state["metadata"], state["related_notes"]
     )
     saved_paths["obsidian"] = obsidian_path
 
@@ -212,7 +268,7 @@ def node_save(state: NoteState) -> NoteState:
             print(f"⚠️ Notion 저장 실패 (Obsidian은 저장됨): {e}")
     # 저장 후 임베딩 DB에도 저장
     store.add_note(
-        note_id=str(obsidian_path),  # 같은 이름일 시 UPSERT
+        note_id=str(Path(state["file_path"]).resolve()),  # 같은 이름일 시 UPSERT
         content=state["enhanced_content"],
         metadata={
             "title": state["metadata"].get("title", state["title"]),
@@ -227,13 +283,17 @@ def node_save(state: NoteState) -> NoteState:
     return state
 
 
-def should_continue(state: NoteState) -> Literal["enhance", "save"]:
+def should_continue(state: NoteState) -> Literal["enhance", "approved"]:
     """조건부 분기: 피드백 후 다음 단계 결정"""
 
     if state["user_feedback"] == "edit":
-        return "enhance"  # 다시 보완
-    else:
-        return "save"  # 저장
+        return "enhance"  # 글 향상
+    return "approved"  # 분류 + 연관노트 검색
+
+
+def node_dispatch(state: NoteState) -> NoteState:
+    """빈 노드로 병렬처리"""
+    return state
 
 
 def create_workflow():
@@ -244,6 +304,10 @@ def create_workflow():
     # 노드 추가
     workflow.add_node("enhance", node_enhance)
     workflow.add_node("feedback", node_feedback)
+    workflow.add_node("classify", node_classify)
+    workflow.add_node("user_input", node_user_input)
+    workflow.add_node("dispatch", node_dispatch)
+    workflow.add_node("find_related", node_find_related)  # 여기서 태그까지.
     workflow.add_node("save", node_save)
 
     # 엣지 연결
@@ -252,11 +316,14 @@ def create_workflow():
 
     # 조건부 분기: feedback 후 다음 단계 결정
     workflow.add_conditional_edges(
-        "feedback",
-        should_continue,
-        {"enhance": "enhance", "save": "save"},
+        "feedback", should_continue, {"enhance": "enhance", "approved": "dispatch"}
     )
 
+    workflow.add_edge("dispatch", "classify")  # 여기서 fan-out
+    workflow.add_edge("dispatch", "find_related")  # 동시에 두 노드로
+    workflow.add_edge("classify", "user_input")
+    workflow.add_edge("find_related", "user_input")
+    workflow.add_edge("user_input", "save")
     workflow.add_edge("save", END)
 
     return workflow.compile()

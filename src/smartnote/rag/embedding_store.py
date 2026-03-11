@@ -34,6 +34,11 @@ class EmbeddingStore:
         # content를 임베딩 → ChromaDB에 저장
         # metadata: title, category, subcategory, tags, file_path
 
+    def is_embedded(self, note_id: str) -> bool:
+        """파일이 이미 ChromaDB에 있는지 확인"""
+        result = self.collection.get(ids=[note_id])
+        return len(result["ids"]) > 0
+
     def search_related(
         self, content: str, top_k: int = 3, cur_title: str = ""
     ) -> list[dict]:
