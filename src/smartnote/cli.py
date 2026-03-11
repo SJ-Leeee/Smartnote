@@ -102,6 +102,8 @@ def save(
         "user_feedback": "",
         "user_feedback_text": "",
         "saved_paths": {},
+        "related_notes": [],
+        "classify_result": {},
     }
 
     try:
