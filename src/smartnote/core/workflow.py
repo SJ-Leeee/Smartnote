@@ -67,6 +67,9 @@ class NoteState(TypedDict):
     # 평가점수
     quality_scores: dict
 
+    # 자동 재시도 횟수
+    judge_retry_count: int
+
 
 def _select_category(result: dict) -> tuple[str, str]:
     """방법4: confidence 기반 카테고리 선택 UX"""
@@ -307,8 +310,6 @@ def node_save(state: NoteState) -> NoteState:
     )
 
     state["saved_paths"] = saved_paths
-    if state.get("quality_scores"):
-        log_score(state["file_path"], state["quality_scores"])  # LLM 평가 로그기록
     return state
 
 
@@ -318,6 +319,19 @@ def should_continue(state: NoteState) -> Literal["enhance", "approved"]:
     if state["user_feedback"] == "edit":
         return "enhance"  # 글 향상
     return "approved"  # 분류 + 연관노트 검색
+
+
+def should_retry(state: NoteState) -> Literal["enhance", "feedback"]:
+    scores = state.get("quality_scores", {})
+    total = scores.get("total", 10)
+    retry_count = state.get("judge_retry_count", 0)
+
+    if total < 8 and retry_count < 2:
+        console.print(
+            f"[yellow]⚡ Judge 점수 {total}/10 → 자동 재시도({retry_count}/2)[/yellow]"
+        )
+        return "enhance"
+    return "feedback"
 
 
 def node_dispatch(state: NoteState) -> NoteState:
@@ -332,7 +346,20 @@ def node_judge(state: NoteState) -> dict:
         enhanced=state["enhanced_content"],
         tags=state["metadata"].get("tags", []),
     )
-    return {"quality_scores": scores}
+    retry_count = state.get("judge_retry_count", 0)
+    phase = f"attempt_{retry_count + 1}"
+    log_score(state["file_path"], scores, phase=phase)
+
+    issues_feedback = ""
+    if scores.get("total", 10) < 8 and retry_count < 2:
+        issues = scores.get("issues", [])
+        if issues:
+            issues_feedback = "다음 문제를 개선해줘: " + ",".join(issues)
+    return {
+        "quality_scores": scores,
+        "judge_retry_count": retry_count + 1,
+        "user_feedback_text": issues_feedback,
+    }
 
 
 def create_workflow():
@@ -353,8 +380,9 @@ def create_workflow():
     # 엣지 연결
     workflow.set_entry_point("enhance")
     workflow.add_edge("enhance", "judge")
-    workflow.add_edge("judge", "feedback")
 
+    # 조건부 분기: 평가후 자동향상 로직
+    workflow.add_conditional_edges("judge", should_retry)
     # 조건부 분기: feedback 후 다음 단계 결정
     workflow.add_conditional_edges(
         "feedback", should_continue, {"enhance": "enhance", "approved": "dispatch"}
