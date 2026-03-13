@@ -10,6 +10,7 @@ LangGraph 워크플로우
 import time
 from pathlib import Path
 from smartnote.core.judge import judge_quality
+from smartnote.core.score_logger import log_score
 from smartnote.rag.embedding_store import EmbeddingStore
 from smartnote.storage.obsidian import ObsidianStorage
 from smartnote.storage.notion import NotionStorage
@@ -154,7 +155,11 @@ def node_feedback(state: NoteState) -> NoteState:
     scores = state.get("quality_scores")
     if scores:
         issues_text = (
-            "\n" + "\n".join(f"[yellow]{i+1}. {issue}[/yellow]" for i, issue in enumerate(scores["issues"]))
+            "\n"
+            + "\n".join(
+                f"[yellow]{i+1}. {issue}[/yellow]"
+                for i, issue in enumerate(scores["issues"])
+            )
             if scores.get("issues")
             else ""
         )
@@ -302,6 +307,8 @@ def node_save(state: NoteState) -> NoteState:
     )
 
     state["saved_paths"] = saved_paths
+    if state.get("quality_scores"):
+        log_score(state["file_path"], state["quality_scores"])  # LLM 평가 로그기록
     return state
 
 
