@@ -9,6 +9,7 @@ LangGraph 워크플로우
 
 import time
 from pathlib import Path
+from smartnote.core.judge import judge_quality
 from smartnote.rag.embedding_store import EmbeddingStore
 from smartnote.storage.obsidian import ObsidianStorage
 from smartnote.storage.notion import NotionStorage
@@ -61,6 +62,9 @@ class NoteState(TypedDict):
     # 병렬화
     related_notes: list
     classify_result: dict  # node_classify의 raw LLM 결과
+
+    # 평가점수
+    quality_scores: dict
 
 
 def _select_category(result: dict) -> tuple[str, str]:
@@ -146,6 +150,24 @@ def node_feedback(state: NoteState) -> NoteState:
             border_style="cyan",
         )
     )
+
+    scores = state.get("quality_scores")
+    if scores:
+        issues_text = (
+            "\n" + "\n".join(f"[yellow]{i+1}. {issue}[/yellow]" for i, issue in enumerate(scores["issues"]))
+            if scores.get("issues")
+            else ""
+        )
+        console.print(
+            Panel(
+                f"[cyan]원본보존[/]{scores['original_preservation']}/10  "
+                f"[cyan]태그품질[/] {scores['tag_quality']}/10  "
+                f"[cyan]가독성[/] {scores['readability']}/10  "
+                f"→ [bold]총점 {scores['total']}/10[/]" + issues_text,
+                title="[bold green]Judge 평가[/bold green]",
+                border_style="green",
+            )
+        )
 
     while True:
         console.print(
@@ -296,6 +318,16 @@ def node_dispatch(state: NoteState) -> NoteState:
     return state
 
 
+def node_judge(state: NoteState) -> dict:
+    """보완본 품질 평가 (sonnet judge)"""
+    scores = judge_quality(
+        original=state["original_content"],
+        enhanced=state["enhanced_content"],
+        tags=state["metadata"].get("tags", []),
+    )
+    return {"quality_scores": scores}
+
+
 def create_workflow():
     """워크플로우 생성"""
 
@@ -303,6 +335,7 @@ def create_workflow():
 
     # 노드 추가
     workflow.add_node("enhance", node_enhance)
+    workflow.add_node("judge", node_judge)
     workflow.add_node("feedback", node_feedback)
     workflow.add_node("classify", node_classify)
     workflow.add_node("user_input", node_user_input)
@@ -312,7 +345,8 @@ def create_workflow():
 
     # 엣지 연결
     workflow.set_entry_point("enhance")
-    workflow.add_edge("enhance", "feedback")
+    workflow.add_edge("enhance", "judge")
+    workflow.add_edge("judge", "feedback")
 
     # 조건부 분기: feedback 후 다음 단계 결정
     workflow.add_conditional_edges(
