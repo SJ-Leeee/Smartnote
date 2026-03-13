@@ -104,6 +104,7 @@ def save(
         "saved_paths": {},
         "related_notes": [],
         "classify_result": {},
+        "judge_retry_count": 0,
     }
 
     try:
